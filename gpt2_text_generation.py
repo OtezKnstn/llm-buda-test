@@ -5,6 +5,8 @@
 import pybuda
 from pybuda.transformers.pipeline import pipeline as pybuda_pipeline
 from transformers import GPT2Config, GPT2LMHeadModel, GPT2Tokenizer
+import logging
+logging.getLogger("pybuda").setLevel(logging.ERROR)
 
 
 def run_gpt2_text_gen(batch_size=1):
@@ -28,28 +30,28 @@ def run_gpt2_text_gen(batch_size=1):
     )
 
     # Sample input text
-    while(1):
-        prefix_text = [str(input())] * batch_size
+    prefix_text = [str(input())] * batch_size
 
-        # Initialize pipeline
-        text_generator = pybuda_pipeline("text-generation", model=model, tokenizer=tokenizer, batch_size=batch_size)
+    # Initialize pipeline
+    text_generator = pybuda_pipeline("text-generation", model=model, tokenizer=tokenizer, batch_size=batch_size)
 
-        # Run inference on Tenstorrent device
-        answer = text_generator(
-            prefix_text,
-            max_length=30,
-            num_beams=1,
-            num_return_sequences=1,
-            pad_token_id=tokenizer.pad_token_id,
-            no_repeat_ngram_size=2,
-        )
+    # Run inference on Tenstorrent device
+    answer = text_generator(
+        prefix_text,
+        max_length=30,
+        num_beams=1,
+        num_return_sequences=1,
+        pad_token_id=tokenizer.pad_token_id,
+        no_repeat_ngram_size=2,
+    )
 
-        # Report output
-        for sample_id in range(batch_size):
-            print(f"Sample ID: {sample_id}")
-            print(f"Prefix text: {prefix_text[sample_id]}")
-            print(f"Generated text: {answer[sample_id]}")
+    # Report output
+    for sample_id in range(batch_size):
+        print(f"Sample ID: {sample_id}")
+        print(f"Prefix text: {prefix_text[sample_id]}")
+        print(f"Generated text: {answer[sample_id]}")
 
 
 if __name__ == "__main__":
-    run_gpt2_text_gen()
+    while True:
+        run_gpt2_text_gen()
