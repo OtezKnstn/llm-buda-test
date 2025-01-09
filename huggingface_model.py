@@ -4,7 +4,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 def run_text_gen(batch_size=1):
     # Загрузка модели и токенизатора
-    model_name = "decapoda-research/llama-7b-hf"  # Укажите нужную модель
+    model_name = "gai-labs/strela"  # Укажите нужную модель
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
 
