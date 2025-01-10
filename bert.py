@@ -41,12 +41,6 @@ tt0 = pybuda.TTDevice(
     name="tt_device_0",  # here we can give our device any name we wish, for tracking purposes
 )
 
-# Create a TTDevice instance with a specified architecture
-tt0 = pybuda.TTDevice(
-    name="tt_device_0",  # You can give your device any name for tracking purposes
-    arch=pybuda.BackendDevice.Grayskull  # Optionally set the target device architecture
-)
-
 # Create module
 pybuda_module = pybuda.PyTorchModule(
     name = "pt_bert_question_answering",  # give the module a name, this will be used for tracking purposes
