@@ -51,7 +51,10 @@ pybuda_module = pybuda.PyTorchModule(
 tt0.place_module(module=pybuda_module)
 
 # Run inference on Tenstorrent device
-output_q = pybuda.run_inference(module=pybuda_module)  # executes compilation (if first time) + runtime
+output_q = pybuda.run_inference( # executes compilation (if first time) + runtime
+    pybuda_module, 
+    inputs=[input_tokens["input_ids"], input_tokens["attention_mask"]]
+)
 output = output_q.get()  # get last value from output queue
 
 # Data postprocessing
