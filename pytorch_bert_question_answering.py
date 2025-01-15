@@ -70,6 +70,8 @@ if __name__ == "__main__":
 
             # Combine outputs for data parallel runs
             if os.environ.get("PYBUDA_N300_DATA_PARALLEL", "0") == "1":
+                print("\n\n\nN300\n\n\n")
+
                 concat_answer_start = torch.cat((output[0].to_pytorch(), output[1].to_pytorch()), dim=0)
                 concat_answer_end = torch.cat((output[2].to_pytorch(), output[3].to_pytorch()), dim=0)
                 buda_answer_start = pybuda.Tensor.create_from_torch(concat_answer_start)
