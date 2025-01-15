@@ -79,7 +79,8 @@ def run_bert_question_answering_pytorch(batch_size=1):
         print(f"Question: {question[sample_id]}")
         print(f"Answer: {answer}")
 
-
 if __name__ == "__main__":
+    import time
+    start_time = time.time()
     run_bert_question_answering_pytorch()
-    
+    print('\n\n\nElapsed time: ', time.time() - start_time)
