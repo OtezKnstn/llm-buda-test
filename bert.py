@@ -2,7 +2,6 @@
 import os
 from typing import Dict, Tuple, Union
 
-import nest_asyncio
 import pybuda
 import torch
 from transformers import BertForSequenceClassification, BertTokenizer
