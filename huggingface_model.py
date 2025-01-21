@@ -60,7 +60,7 @@ class BERTHandler:
         os.environ["LOGGER_LEVEL"] = "ERROR"
 
         # Load BERT tokenizer and model from HuggingFace for text classification task
-        model_ckpt = "mistralai/Mistral-7B-v0.1"
+        model_ckpt = "IlyaGusev/saiga_nemo_12b"
         # model_ckpt = "mistralai/Ministral-8B-Instruct-2410"
         model = AutoModelForCausalLM.from_pretrained(model_ckpt)
         self.tokenizer = AutoTokenizer.from_pretrained(model_ckpt)
