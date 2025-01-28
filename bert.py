@@ -1,88 +1,202 @@
-# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
-# SPDX-License-Identifier: Apache-2.0
-
-# BERT Demo Script - SQuADv1.1 QA
-
+# import the pybuda library and additional libraries required for this tutorial
 import os
+from typing import Dict, Tuple, Union
 
 import pybuda
 import torch
-from transformers import BertForQuestionAnswering, BertTokenizer
+from transformers import BertForSequenceClassification, BertTokenizer
 
+class BERTHandler:
+    """
+    A class to represent a BERT model RESTful API handler.
 
-def run_bert_question_answering_pytorch(batch_size=1):
+    ...
 
-    # Set PyBuda configurations
-    compiler_cfg = pybuda.config._get_global_compiler_config()
-    compiler_cfg.default_df_override = pybuda._C.DataFormat.Float16_b
-    compiler_cfg.default_dram_parameters = False
-    compiler_cfg.balancer_policy = "Ribbon"
-    os.environ["PYBUDA_RIBBON2"] = "1"
-    os.environ["TT_BACKEND_OVERLAY_MAX_EXTRA_BLOB_SIZE"] = f"{81*1024}"
+    Attributes
+    ----------
+    initialized : bool
+        Flag to mark if model as been compiled or not
+    device0 : pybuda.TTDevice
+        Tenstorrent device object which represents the hardware target to deploy model on
+    seqlen : int
+        Input sequence length
 
-    # Load Bert tokenizer and model from HuggingFace
-    model_ckpt = "bert-large-cased-whole-word-masking-finetuned-squad"
-    tokenizer = BertTokenizer.from_pretrained(model_ckpt)
-    model = BertForQuestionAnswering.from_pretrained(model_ckpt)
+    Methods
+    -------
+    initialize():
+        Initializes the model by downloading the weights, selecting the hardware target, and compiling the model
+    preprocess(input_text):
+        Preprocess the input (apply tokenization)
+    inference(processed_inputs):
+        Run inference on device
+    postprocess(logits):
+        Run post-processing on logits from model
+    handle(input_text):
+        Run all of the steps on user inputs
+    """
 
-    # Load data sample from SQuADv1.1
-    context = (
-        [
-            """Super Bowl 50 was an American football game to determine the champion of the National Football League
-    (NFL) for the 2015 season. The American Football Conference (AFC) champion Denver Broncos defeated the
-    National Football Conference (NFC) champion Carolina Panthers 24\u201310 to earn their third Super Bowl title.
-    The game was played on February 7, 2016, at Levi's Stadium in the San Francisco Bay Area at Santa Clara, California.
-    As this was the 50th Super Bowl, the league emphasized the \"golden anniversary\" with various gold-themed
-    initiatives, as well as temporarily suspending the tradition of naming each Super Bowl game with Roman numerals
-    (under which the game would have been known as \"Super Bowl L\"), so that the logo could prominently
-    feature the Arabic numerals 50."""
-        ]
-        * batch_size
-    )
+    def __init__(self, seqlen: int = 128):
+        """
+        Constructs all the necessary attributes for the BERTHandler object.
 
-    question = ["Which NFL team represented the AFC at Super Bowl 50?"] * batch_size
+        Parameters
+        ----------
+        seqlen : int, optional
+            Input sequence length, by default 128
+        batch_size : int, optional
+            Input batch size, by default 1
+        """
+        self.initialized = False
+        self.device0 = None
+        self.seqlen = seqlen
 
-    # Data preprocessing
-    input_tokens = tokenizer(
-        question,
-        context,
-        max_length=384,
-        padding="max_length",
-        truncation=True,
-        return_tensors="pt",
-    )
+    def initialize(self):
+        """
+        Initialize and compile model pipeline.
+        """
 
-    # Run inference on Tenstorrent device
-    output_q = pybuda.run_inference(
-        pybuda.PyTorchModule("pt_bert_question_answering", model),
-        inputs=[input_tokens],
-    )
-    output = output_q.get()
+        # Set logging levels
+        os.environ["LOGURU_LEVEL"] = "ERROR"
+        os.environ["LOGGER_LEVEL"] = "ERROR"
 
-    # Combine outputs for data parallel runs
-    if os.environ.get("PYBUDA_N300_DATA_PARALLEL", "0") == "1":
-        concat_answer_start = torch.cat((output[0].to_pytorch(), output[1].to_pytorch()), dim=0)
-        concat_answer_end = torch.cat((output[2].to_pytorch(), output[3].to_pytorch()), dim=0)
-        buda_answer_start = pybuda.Tensor.create_from_torch(concat_answer_start)
-        buda_answer_end = pybuda.Tensor.create_from_torch(concat_answer_end)
-        output = [buda_answer_start, buda_answer_end]
+        # Load BERT tokenizer and model from HuggingFace for text classification task
+        model_ckpt = "assemblyai/bert-large-uncased-sst2"
+        model = BertForSequenceClassification.from_pretrained(model_ckpt)
+        self.tokenizer = BertTokenizer.from_pretrained(model_ckpt)
 
-    # Data postprocessing
-    for sample_id in range(batch_size):
-        answer_start = output[0].value()[sample_id].argmax(-1).item()
-        answer_end = output[1].value()[sample_id].argmax(-1).item()
-        answer = tokenizer.decode(input_tokens["input_ids"][sample_id, answer_start : answer_end + 1])
+        # Initialize TTDevice object
+        tt0 = pybuda.TTDevice(
+            name="tt_device_0",  # here we can give our device any name we wish, for tracking purposes
+        )
 
-        # Answer - "Denver Broncos"
-        print(f"Sample ID: {sample_id}")
-        print(f"Context: {context[sample_id]}")
-        print(f"Question: {question[sample_id]}")
-        print(f"Answer: {answer}")
+        # Create PyBUDA module
+        pybuda_module = pybuda.PyTorchModule(
+            name = "pt_bert_text_classification",  # give the module a name, this will be used for tracking purposes
+            module=model  # specify the model that is being targeted for compilation
+        )
 
+        # Place module on device
+        tt0.place_module(module=pybuda_module)
+        self.device0 = tt0
 
+        # Load data sample to compile model
+        sample_input = self.preprocess("sample input text")
+
+        # Push input to model
+        self.device0.push_to_inputs(*sample_input)
+
+        # Compile & initialize the pipeline for inference, with given shapes
+        output_q = pybuda.run_inference()
+        _ = output_q.get()
+
+        # Configure initialization flag
+        self.initialized = True
+        print("BERTHandler initialized.")
+
+    def preprocess(self, input_text: str) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Preprocess the user inputs.
+
+        Parameters
+        ----------
+        input_text : str
+            User input
+
+        Returns
+        -------
+        Tuple[torch.Tensor, torch.Tensor]
+            Processed outputs: `input_ids` and `attention_mask`
+        """
+
+        input_tokens = self.tokenizer(
+            input_text,
+            max_length=self.seqlen,  # set the maximum input context length
+            padding="max_length",  # pad to max length for fixed input size
+            truncation=True,  # truncate to max length
+            return_tensors="pt",  # return PyTorch tensor
+        )
+
+        return (input_tokens["input_ids"], input_tokens["attention_mask"])
+
+    def inference(self, processed_inputs: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+        """
+        Run inference on Tenstorrent hardware.
+
+        Parameters
+        ----------
+        processed_inputs : Tuple[torch.Tensor, torch.Tensor]
+            Processed inputs: `input_ids` and `attention_mask`
+
+        Returns
+        -------
+        torch.Tensor
+            Output logits from model
+        """
+
+        self.device0.push_to_inputs(*processed_inputs)
+        output_q = pybuda.run_inference()
+        output = output_q.get()
+        logits = output[0].value().detach()
+        return logits
+
+    def postprocessing(self, logits: torch.Tensor) -> Dict[str, Union[str, float]]:
+        """
+        Post-process logits and return dictionary with prediction and confidence score.
+
+        Parameters
+        ----------
+        logits : torch.Tensor
+            Predicted logits from model
+
+        Returns
+        -------
+        Dict[str, Union[str, float]]
+            Output dictionary with predicted class and confidence score
+        """
+
+        probabilities = torch.softmax(logits, dim=1)
+        confidences, predicted_classes = torch.max(probabilities, dim=1)
+        confidences = confidences.cpu().tolist()[0]
+        predicted_classes = predicted_classes.cpu()
+        output = {
+            "predicted sentiment": "positive" if predicted_classes else "negative",
+            "confidence": confidences
+        }
+
+        return output
+
+    def handle(self, text_input: str) -> Dict[str, Union[str, float]]:
+        """
+        Handler function which runs end-to-end model pipeline
+
+        Parameters
+        ----------
+        text_input : str
+            User input
+
+        Returns
+        -------
+        Dict[str, Union[str, float]]
+            Output dictionary with predicted class and confidence score
+        """
+
+        # Data preprocessing
+        processed_text = self.preprocess(text_input)
+
+        # Run inference
+        logits = self.inference(processed_text)
+
+        # Data postprocessing
+        output = self.postprocessing(logits)
+
+        return output
 if __name__ == "__main__":
     import time
     start_time = time.time()
-    run_bert_question_answering_pytorch()
-    print('\n\n\nAnswer time: ', time.time() - start_time)
-
+    model = BERTHandler()
+    model.initialize()
+    print('\nCompile time: ', time.time() - start_time)
+    for i in range(5):
+        start_time = time.time()
+        print(model.handle(input("Input:")))
+        print('\nAnswer time: ', time.time() - start_time)
