@@ -81,4 +81,8 @@ def run_bert_question_answering_pytorch(batch_size=1):
 
 
 if __name__ == "__main__":
+    import time
+    start_time = time.time()
     run_bert_question_answering_pytorch()
+    print('\n\n\nAnswer time: ', time.time() - start_time)
+
