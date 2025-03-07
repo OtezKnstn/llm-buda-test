@@ -1,0 +1,2 @@
+Model, Setting, Batch, First Run (sec), Second Run (sec), Compile Time (sec), Expected Compile Time (sec), Inference Time (sec), Expected Inference Time (sec), Throughput (batch*inf/sec), Inference Time CPU (sec), Throughput CPU (batch*inf/sec)
+ttnn_resnet50_trace_2cqs_batch_size16, 224x224_batchsize16, 16, 29.68, 0.00, 29.67, 30.00, 0.0034, 0.0040, 4687.0714, 0.6826, 23.4394
